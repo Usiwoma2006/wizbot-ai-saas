@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'websites',
     'chat',
     'suggestions',
+    'integrations',
 ]
 
 AUTH_USER_MODEL = 'accounts.Merchant'
