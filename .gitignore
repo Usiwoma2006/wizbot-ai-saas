@@ -1,0 +1,30 @@
+# Python / Django
+venv/
+__pycache__/
+*.pyc
+*.pyo
+db.sqlite3
+*.log
+staticfiles/
+media/
+
+# Environment variables — NEVER commit these, they contain API keys
+.env
+.env.local
+.env.*.local
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+.turbo/
+
+# Editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tmp
