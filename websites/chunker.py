@@ -48,7 +48,8 @@ def chunk_pages(pages):
                 'url': page.url,
                 'title': page.title,
                 'content': chunk,
-                'chunk_index': i
+                'chunk_index': i,
+                'source_type': 'page',
             })
 
     return all_chunks

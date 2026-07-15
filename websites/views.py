@@ -98,7 +98,7 @@ def run_scrape(website, job):
                     content=chunk['content'],
                     embedding=chunk['embedding'],
                     chunk_index=chunk['chunk_index'],
-                    source_type='scraped'
+                    source_type='page'
                 )
             except Exception as e:
                 print(f"Error saving chunk: {e}")

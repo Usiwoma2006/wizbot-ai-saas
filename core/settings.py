@@ -106,6 +106,11 @@ DATABASES = {
     }
 }
 
+# Shopify integration
+SHOPIFY_CLIENT_ID = os.getenv('SHOPIFY_CLIENT_ID')
+SHOPIFY_CLIENT_SECRET = os.getenv('SHOPIFY_CLIENT_SECRET')
+SHOPIFY_REDIRECT_URI = os.getenv('SHOPIFY_REDIRECT_URI')
+SHOPIFY_SCOPES = 'read_products'
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators

@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/chat-sessions/", include("chat.chatlog_urls")),
     path("api/suggestions/", include("suggestions.urls")),
     path("api/dashboard/", include("chat.dashboard_urls")),
+    path('api/integrations/', include('integrations.urls')),
 ]
 
 """

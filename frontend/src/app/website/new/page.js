@@ -20,6 +20,10 @@ export default function NewWebsite() {
 
   const [step, setStep] = useState(1)
 
+  // Shopify-specific state
+  const [shopDomain, setShopDomain] = useState('')
+  const [connectingShopify, setConnectingShopify] = useState(false)
+
   // Step 1 form state
   const [platform, setPlatform] = useState('')
   const [url, setUrl] = useState('')
@@ -37,6 +41,18 @@ export default function NewWebsite() {
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [])
+
+  // Detect return from Shopify OAuth. This MUST run in useEffect, not in the
+  // useState initializer above — useEffect only runs client-side, after
+  // hydration. Reading window.location during the initial render would
+  // produce a different result on the server (no window) vs the client
+  // (has window), causing a React hydration mismatch.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('shopify') === 'connected') {
+      setStep(3)
     }
   }, [])
 
@@ -84,6 +100,28 @@ export default function NewWebsite() {
       setSubmitError(message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleShopifyConnect() {
+    setSubmitError(null)
+
+    if (!shopDomain || !shopDomain.includes('.myshopify.com')) {
+      setSubmitError('Please enter your store domain, e.g. your-store.myshopify.com')
+      return
+    }
+
+    setConnectingShopify(true)
+    try {
+      const { data } = await api.post('/integrations/shopify/connect/', {
+        shop_domain: shopDomain,
+      })
+      // Full redirect to Shopify's consent screen — not an axios call,
+      // this leaves your app entirely and goes to Shopify's own domain.
+      window.location.href = data.auth_url
+    } catch (err) {
+      setSubmitError("Couldn't start the Shopify connection. Please try again.")
+      setConnectingShopify(false)
     }
   }
 
@@ -179,46 +217,79 @@ export default function NewWebsite() {
                 ))}
               </div>
 
-              <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
-                Store URL
-              </label>
-              <input
-                id="url"
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://yourstore.com"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+              {platform === 'shopify' ? (
+                <div>
+                  <label htmlFor="shopDomain" className="block text-sm font-medium text-gray-700 mb-2">
+                    Shopify store domain
+                  </label>
+                  <input
+                    id="shopDomain"
+                    type="text"
+                    value={shopDomain}
+                    onChange={(e) => setShopDomain(e.target.value)}
+                    placeholder="your-store.myshopify.com"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
 
-              <label htmlFor="token" className="block text-sm font-medium text-gray-700 mb-2">
-                Access token <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                id="token"
-                type="text"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="Paste your store's API token"
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-400 mb-6">
-                Not required for V1. Adding this now enables richer features later, like product cards in chat.
-              </p>
+                  {submitError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-6">
+                      {submitError}
+                    </div>
+                  )}
 
-              {submitError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-6">
-                  {submitError}
+                  <button
+                    type="button"
+                    onClick={handleShopifyConnect}
+                    disabled={connectingShopify}
+                    className="w-full py-2.5 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {connectingShopify ? 'Redirecting to Shopify…' : 'Connect with Shopify'}
+                  </button>
                 </div>
-              )}
+              ) : (
+                <>
+                  <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                    Store URL
+                  </label>
+                  <input
+                    id="url"
+                    type="text"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://yourstore.com"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Starting crawl…' : 'Connect and start crawl'}
-              </button>
+                  <label htmlFor="token" className="block text-sm font-medium text-gray-700 mb-2">
+                    Access token <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
+                  <input
+                    id="token"
+                    type="text"
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    placeholder="Paste your store's API token"
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <p className="text-xs text-gray-400 mb-6">
+                    Not required for V1. Adding this now enables richer features later, like product cards in chat.
+                  </p>
+
+                  {submitError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-6">
+                      {submitError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {submitting ? 'Starting crawl…' : 'Connect and start crawl'}
+                  </button>
+                </>
+              )}
             </form>
           )}
 
@@ -274,26 +345,30 @@ export default function NewWebsite() {
           )}
 
           {/* STEP 3: Success */}
-          {step === 3 && job && (
+          {step === 3 && (
             <div className="text-center">
               <div className="w-14 h-14 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
                 <CheckCircle2 size={28} className="text-green-600" />
               </div>
               <h1 className="text-xl font-semibold text-gray-900 mb-1">Your store is connected</h1>
               <p className="text-sm text-gray-500 mb-6">
-                Wiz has learned your content and is ready to answer customer questions.
+                {job
+                  ? "Wiz has learned your content and is ready to answer customer questions."
+                  : "Your Shopify store is connected. Wiz will start learning your products shortly."}
               </p>
 
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-2xl font-semibold text-gray-900">{job.pages_done}</p>
-                  <p className="text-xs text-gray-400 mt-1">Pages crawled</p>
+              {job && (
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-2xl font-semibold text-gray-900">{job.pages_done}</p>
+                    <p className="text-xs text-gray-400 mt-1">Pages crawled</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-2xl font-semibold text-gray-900">{job.chunks_created}</p>
+                    <p className="text-xs text-gray-400 mt-1">Chunks indexed</p>
+                  </div>
                 </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-2xl font-semibold text-gray-900">{job.chunks_created}</p>
-                  <p className="text-xs text-gray-400 mt-1">Chunks indexed</p>
-                </div>
-              </div>
+              )}
 
               <button
                 onClick={() => router.push('/dashboard')}

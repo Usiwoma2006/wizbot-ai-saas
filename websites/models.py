@@ -136,7 +136,14 @@ class KnowledgeChunk(TimeStampedModel):
     page = models.ForeignKey(
         'websites.CrawledPage',
         on_delete=models.CASCADE,
-        related_name='chunks'
+        related_name='chunks',
+        null=True, blank=True          # CHANGED
+    )
+    product = models.ForeignKey(       # NEW
+        'integrations.Product',
+        on_delete=models.CASCADE,
+        related_name='chunks',
+        null=True, blank=True
     )
     merchant = models.ForeignKey(
         'accounts.Merchant',
@@ -149,4 +156,12 @@ class KnowledgeChunk(TimeStampedModel):
     chunk_index = models.IntegerField(default=0)
 
     def __str__(self):
-        return f"Chunk {self.chunk_index} - {self.page.title}"
+        label = self.page.title if self.page_id else (self.product.title if self.product_id else 'unknown')
+        return f"Chunk {self.chunk_index} - {label}"
+
+    def get_source(self):
+        if self.source_type == 'product' and self.product_id:
+            return {'title': self.product.title, 'url': self.product.product_url, 'type': 'product'}
+        if self.page_id:
+            return {'title': self.page.title, 'url': self.page.url, 'type': 'page'}
+        return {'title': None, 'url': None, 'type': self.source_type or 'unknown'}
