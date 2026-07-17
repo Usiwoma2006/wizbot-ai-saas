@@ -53,6 +53,7 @@ class ChatMessage(TimeStampedModel):
     response_time_ms = models.IntegerField(null=True, blank=True)
     tokens_used = models.IntegerField(null=True, blank=True)
     sources = models.JSONField(null=True, blank=True)
+    products = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['created_at']

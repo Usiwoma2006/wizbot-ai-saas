@@ -5,12 +5,11 @@ from .models import ChatSession, ChatMessage, FallbackTicket
 
 
 class ChatMessageSerializer(serializers.ModelSerializer):
-    # Frontend expects `created`, model field is `created_at` (TimeStampedModel).
     created = serializers.DateTimeField(source='created_at', read_only=True)
 
     class Meta:
         model = ChatMessage
-        fields = ['id', 'role', 'content', 'status', 'confidence_score', 'created']
+        fields = ['id', 'role', 'content', 'status', 'confidence_score', 'created', 'sources', 'products']
 
 
 class ChatSessionSerializer(serializers.ModelSerializer):
