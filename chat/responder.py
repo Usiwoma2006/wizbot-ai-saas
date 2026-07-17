@@ -33,6 +33,13 @@ def resolve_query(question, history_messages):
     system_prompt = """You rewrite a customer's latest chat message into a standalone question.
 Resolve pronouns and references (e.g. "them", "it", "that one", "the cheaper one") using the
 conversation history below, so the rewritten question makes full sense with NO prior context.
+
+The conversation is ordered oldest to newest. When resolving a pronoun or reference, always
+prefer the MOST RECENT relevant turn — do not reach back past a more recent message that
+changed the subject. If the most recent turn doesn't give enough information to resolve the
+reference confidently, leave the ambiguous wording as-is rather than guessing based on older,
+no-longer-relevant context.
+
 If the message is already standalone, return it unchanged.
 Respond with ONLY the rewritten question — no preamble, no quotes, no explanation."""
 

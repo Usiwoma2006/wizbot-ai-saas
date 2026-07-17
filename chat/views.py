@@ -90,6 +90,7 @@ class ChatView(APIView):
         relevant_chunks, top_raw_similarity = search_knowledge_base(resolved_question, session.merchant)
         print(f"DEBUG — query: '{resolved_question}' | top_raw_similarity: {top_raw_similarity}", flush=True)
         ai_response = generate_response(resolved_question, relevant_chunks, top_raw_similarity)
+        response_time = int((time.time() - start_time) * 1000)
 
         message_status = (
             ChatMessage.MessageStatus.NEEDS_HUMAN
