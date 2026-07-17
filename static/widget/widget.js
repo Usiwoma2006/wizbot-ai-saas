@@ -52,6 +52,42 @@
     .wizbot-msg.customer { align-self: flex-end; color: #fff; background: var(--wizbot-color, #2563eb); border-bottom-right-radius: 4px; }
     .wizbot-msg.assistant { align-self: flex-start; background: #fff; color: #1f2937; border: 1px solid #e5e7eb; border-bottom-left-radius: 4px; }
     .wizbot-msg.loading { align-self: flex-start; color: #9ca3af; font-style: italic; }
+
+    /* ---- Product cards (Phase 4) ---- */
+    #wizbot-messages .wizbot-products-row {
+      align-self: flex-start; display: flex; flex-shrink: 0; gap: 10px; overflow-x: auto;
+      width: 100%; max-width: 100%; min-height: 170px; padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .wizbot-product-card {
+      flex: 0 0 140px; width: 140px; min-width: 140px; background: #fff; border: 1px solid #e5e7eb;
+      border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;
+      text-decoration: none; color: inherit;
+    }
+    .wizbot-product-card.is-static { cursor: default; }
+    .wizbot-product-image {
+      display: block; width: 140px; min-width: 140px; height: 100px; min-height: 100px;
+      object-fit: cover; background: #f3f4f6; flex-shrink: 0;
+    }
+    .wizbot-product-image.placeholder {
+      display: flex; align-items: center; justify-content: center; color: #d1d5db; font-size: 11px;
+    }
+    .wizbot-product-body { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
+    .wizbot-product-title {
+      font-size: 11.5px; font-weight: 600; color: #1f2937; line-height: 1.3;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .wizbot-product-price-row { display: flex; align-items: baseline; gap: 6px; }
+    .wizbot-product-price { font-size: 12.5px; font-weight: 700; color: var(--wizbot-color, #2563eb); }
+    .wizbot-product-compare { font-size: 10.5px; color: #9ca3af; text-decoration: line-through; }
+    .wizbot-product-badge {
+      align-self: flex-start; font-size: 9.5px; font-weight: 600; color: #b91c1c;
+      background: #fee2e2; padding: 2px 6px; border-radius: 999px;
+    }
+    .wizbot-product-link {
+      margin-top: 2px; font-size: 10.5px; font-weight: 600; color: var(--wizbot-color, #2563eb);
+    }
+
     #wizbot-input-row {
       padding: 12px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; flex-shrink: 0; background: #fff;
     }
@@ -115,6 +151,66 @@
     return el;
   }
 
+  // Escapes text used inside attribute-free innerHTML fragments below
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str == null ? '' : String(str);
+    return div.innerHTML;
+  }
+
+  function formatPrice(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const num = Number(value);
+    if (Number.isNaN(num)) return escapeHtml(value);
+    return `$${num.toFixed(2)}`;
+  }
+
+  // Renders one row of product cards under the assistant's message
+  function addProducts(products) {
+    if (!Array.isArray(products) || products.length === 0) return;
+
+    const row = document.createElement('div');
+    row.className = 'wizbot-products-row';
+
+    products.forEach((p) => {
+      const hasLink = typeof p.product_url === 'string' && p.product_url.trim().length > 0;
+      const card = document.createElement(hasLink ? 'a' : 'div');
+      card.className = `wizbot-product-card${hasLink ? '' : ' is-static'}`;
+      if (hasLink) {
+        card.href = p.product_url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+      }
+
+      const price = formatPrice(p.price);
+      const comparePrice = formatPrice(p.compare_at_price);
+      const showCompare = comparePrice && p.compare_at_price !== p.price;
+      const outOfStock = p.is_available === false;
+
+      card.innerHTML = `
+        ${
+          p.image_url
+            ? `<img class="wizbot-product-image" src="${escapeHtml(p.image_url)}" alt="${escapeHtml(p.title)}" loading="lazy" />`
+            : `<div class="wizbot-product-image placeholder">No image</div>`
+        }
+        <div class="wizbot-product-body">
+          <div class="wizbot-product-title">${escapeHtml(p.title || 'Product')}</div>
+          <div class="wizbot-product-price-row">
+            ${price ? `<span class="wizbot-product-price">${price}</span>` : ''}
+            ${showCompare ? `<span class="wizbot-product-compare">${comparePrice}</span>` : ''}
+          </div>
+          ${outOfStock ? `<span class="wizbot-product-badge">Out of stock</span>` : ''}
+          ${hasLink ? `<span class="wizbot-product-link">View product →</span>` : ''}
+        </div>
+      `;
+
+      row.appendChild(card);
+    });
+
+    messagesEl.appendChild(row);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
   async function loadConfig() {
     try {
       const res = await fetch(`${apiBase}/widget/${embedKey}/config/`);
@@ -167,6 +263,7 @@
       const data = await res.json();
       loadingEl.remove();
       addMessage('assistant', data.answer);
+      addProducts(data.products);
     } catch (err) {
       loadingEl.remove();
       addMessage('assistant', 'Sorry, something went wrong. Please try again.');
