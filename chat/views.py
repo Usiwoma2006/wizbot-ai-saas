@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import ChatSession, ChatMessage, FallbackTicket
 from accounts.models import Merchant
 from websites.searcher import search_knowledge_base
-from chat.responder import generate_response
+from chat.responder import generate_response, resolve_query
 from .serializers import (
     FallbackTicketSerializer,
     ChatSessionListSerializer,
@@ -67,6 +67,15 @@ class ChatView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Grab recent history BEFORE creating this new message, so the
+        # rewrite step isn't resolving the question against itself.
+        # Last 6 messages ≈ last 3 customer/assistant turns.
+        recent_messages = list(session.messages.order_by('-created_at')[:6])
+        history_messages = [
+            {"role": m.role, "content": m.content}
+            for m in reversed(recent_messages)
+        ]
+
         ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.CUSTOMER,
@@ -74,18 +83,19 @@ class ChatView(APIView):
             status=ChatMessage.MessageStatus.ANSWERED
         )
 
+        resolved_question = resolve_query(question, history_messages)
+        print(f"DEBUG — original: '{question}' | resolved: '{resolved_question}'", flush=True)
+
         start_time = time.time()
-        relevant_chunks, top_raw_similarity = search_knowledge_base(question, session.merchant)
-        print(f"DEBUG — query: '{question}' | top_raw_similarity: {top_raw_similarity}", flush=True)
-        ai_response = generate_response(question, relevant_chunks, top_raw_similarity)
-        response_time = int((time.time() - start_time) * 1000)
+        relevant_chunks, top_raw_similarity = search_knowledge_base(resolved_question, session.merchant)
+        print(f"DEBUG — query: '{resolved_question}' | top_raw_similarity: {top_raw_similarity}", flush=True)
+        ai_response = generate_response(resolved_question, relevant_chunks, top_raw_similarity)
 
         message_status = (
             ChatMessage.MessageStatus.NEEDS_HUMAN
             if ai_response['needs_human']
             else ChatMessage.MessageStatus.ANSWERED
         )
-
         ChatMessage.objects.create(
             session=session,
             role=ChatMessage.Role.ASSISTANT,
@@ -93,7 +103,8 @@ class ChatView(APIView):
             status=message_status,
             confidence_score=ai_response['confidence'],
             response_time_ms=response_time,
-            sources=ai_response['sources']
+            sources=ai_response['sources'],
+            products=ai_response['products']   # NEW
         )
 
         if ai_response['needs_human']:
@@ -124,6 +135,7 @@ class ChatView(APIView):
             "answer": ai_response['answer'],
             "needs_human": ai_response['needs_human'],
             "confidence": ai_response['confidence'],
+            "products": ai_response['products'],
             "sources": ai_response['sources'],
             "response_time_ms": response_time
         })

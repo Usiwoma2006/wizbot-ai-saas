@@ -1,35 +1,161 @@
 import os
 import cohere
+from integrations.models import Product
 
 client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
+
+MAX_PRODUCTS_IN_RESPONSE = 4
+
+
+def resolve_query(question, history_messages):
+    """
+    Rewrites `question` into a standalone query using recent conversation
+    history, so pronoun/ellipsis follow-ups like "pictures of them" or
+    "does it come in blue" retrieve correctly instead of failing search
+    on their own.
+
+    history_messages: list of {'role': 'customer'|'assistant', 'content': str},
+    oldest first, NOT including the current `question` itself. Pass [] (or
+    the first message of a session) to skip the rewrite entirely.
+
+    This is intentionally a separate, cheap Cohere call — it does NOT touch
+    generate_response's own call. If it fails for any reason, we fall back
+    to the original question rather than blocking the chat.
+    """
+    if not history_messages:
+        return question
+
+    transcript = "\n".join(
+        f"{'Customer' if m['role'] == 'customer' else 'Assistant'}: {m['content']}"
+        for m in history_messages
+    )
+
+    system_prompt = """You rewrite a customer's latest chat message into a standalone question.
+Resolve pronouns and references (e.g. "them", "it", "that one", "the cheaper one") using the
+conversation history below, so the rewritten question makes full sense with NO prior context.
+If the message is already standalone, return it unchanged.
+Respond with ONLY the rewritten question — no preamble, no quotes, no explanation."""
+
+    user_message = f"""CONVERSATION SO FAR:
+{transcript}
+
+LATEST CUSTOMER MESSAGE:
+{question}"""
+
+    try:
+        response = client.chat(
+            model='command-a-03-2025',
+            preamble=system_prompt,
+            message=user_message,
+            temperature=0
+        )
+        rewritten = response.text.strip()
+        return rewritten if rewritten else question
+    except Exception as e:
+        print(f"Cohere query-rewrite error: {e}")
+        return question
+
+
+def get_structured_products(relevant_chunks):
+    """
+    relevant_chunks: list of dicts from search_knowledge_base(), already
+    filtered by min_similarity and sorted by similarity descending.
+
+    Returns (structured, capped_ids):
+      - structured: list of structured product dicts, ordered by highest
+        matching similarity, capped at MAX_PRODUCTS_IN_RESPONSE.
+      - capped_ids: the same product ids, in the same order, as plain ids
+        (not dicts) — so callers can align other logic (like the chunks
+        fed to the LLM) to this exact same product set instead of
+        re-deriving their own selection and risking drift.
+
+    Returns ([], []) if the top chunk isn't product-sourced.
+    """
+    if not relevant_chunks:
+        return [], []
+
+    if relevant_chunks[0]['source_type'] != 'product':
+        return [], []
+
+    seen = set()
+    ordered_product_ids = []
+    for chunk in relevant_chunks:
+        if chunk['source_type'] != 'product':
+            continue
+        pid = chunk['product_id']
+        if pid not in seen:
+            seen.add(pid)
+            ordered_product_ids.append(pid)
+
+    capped_ids = ordered_product_ids[:MAX_PRODUCTS_IN_RESPONSE]
+
+    products_qs = Product.objects.filter(id__in=capped_ids)
+    products_by_id = {p.id: p for p in products_qs}
+
+    structured = []
+    for pid in capped_ids:
+        product = products_by_id.get(pid)
+        if product is None:
+            continue
+        structured.append({
+            'title': product.title,
+            'price': str(product.price),
+            'compare_at_price': str(product.compare_at_price) if product.compare_at_price else None,
+            'image_url': product.image_url,
+            'product_url': product.product_url,
+            'is_available': product.is_available,
+        })
+
+    return structured, capped_ids
 
 
 def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_threshold=0.22):
 
     if not relevant_chunks:
         if top_raw_similarity < off_topic_threshold:
-            # Genuinely unrelated to this store (weather, poems, etc.)
-            # Decline politely — no human agent, no ticket.
             return {
                 'answer': "I'm not able to help with that — I can only answer questions about our products and store policies. Is there something about our store I can help with?",
                 'confidence': top_raw_similarity,
                 'sources': [],
+                'products': [],
                 'needs_human': False
             }
 
-        # Related to the store, but we don't have the info. Worth a human follow-up.
         return {
             'answer': "I'm sorry, I couldn't find that information. Let me connect you with a member of our team who can help further.",
             'confidence': top_raw_similarity,
             'sources': [],
+            'products': [],
             'needs_human': True
         }
+
+    products, capped_ids = get_structured_products(relevant_chunks)
+
+    # If this is a product-flavored response, restrict the chunks used to
+    # build Cohere's context down to only the chunks belonging to the same
+    # capped_ids product set the cards will show — in that same order.
+    # This is what keeps the generated text and the rendered cards in sync:
+    # previously, context here was built from ALL relevant_chunks (which can
+    # span more distinct products than the 4 that make it into the cards),
+    # so Cohere would sometimes describe a different set of products than
+    # what actually got rendered below the message.
+    if capped_ids:
+        chunks_by_product = {}
+        for chunk in relevant_chunks:
+            if chunk['source_type'] != 'product':
+                continue
+            pid = chunk['product_id']
+            if pid in capped_ids and pid not in chunks_by_product:
+                chunks_by_product[pid] = chunk
+        context_chunks = [chunks_by_product[pid] for pid in capped_ids if pid in chunks_by_product]
+    else:
+        context_chunks = relevant_chunks
 
     context = ""
     sources = []
     seen_pages = set()
 
-    for i, chunk in enumerate(relevant_chunks):
+    for i, chunk in enumerate(context_chunks):
         context += f"\n\nSource {i+1} ({chunk['title']}):\n{chunk['content']}"
 
         page_key = chunk['url']
@@ -43,6 +169,7 @@ def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_th
 
     system_prompt = """You are a helpful customer service assistant for an online store.
 Answer the customer's question using ONLY the information provided in SOURCES.
+If SOURCES describes specific products, mention ONLY the products listed in SOURCES — do not add, omit, or reorder them.
 If you can answer the question, even partially, give a direct, confident answer and do NOT mention a human agent or say you are unsure.
 Only say you'll connect them with a human agent if the SOURCES contain NOTHING relevant to the question at all.
 Keep your answer concise, friendly, and helpful."""
@@ -68,6 +195,7 @@ CUSTOMER QUESTION:
             'answer': "I'm having trouble finding that information right now. Let me connect you with our team.",
             'confidence': 0,
             'sources': [],
+            'products': [],
             'needs_human': True
         }
 
@@ -77,5 +205,6 @@ CUSTOMER QUESTION:
         'answer': answer,
         'confidence': confidence,
         'sources': sources,
+        'products': products,
         'needs_human': confidence < 0.35
     }
