@@ -7,7 +7,7 @@ from .serializers import WebsiteSerializer
 from .scraper import scrape_website
 from .chunker import chunk_pages
 from .embedder import embed_chunks
-import threading
+from django_q.tasks import async_task
 
 
 class WebsiteListCreateView(generics.ListCreateAPIView):
@@ -39,11 +39,7 @@ class WebsiteSyncView(APIView):
         website.status = 'scraping'
         website.save()
 
-        thread = threading.Thread(
-            target=run_scrape,
-            args=(website, job)
-        )
-        thread.start()
+        async_task(run_scrape, website, job)
 
         return Response(
             {

@@ -1,13 +1,10 @@
-import threading
-
 from django.shortcuts import redirect
-import threading
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from django.shortcuts import redirect
 from django.core import signing
+from django_q.tasks import async_task
 
 from websites.models import EmbeddingJob, Website
 from .models import ShopifyStore
@@ -90,21 +87,18 @@ class ShopifyCallbackView(APIView):
             }
         )
 
-        # NEW — kick off the initial product sync automatically,
-        # same EmbeddingJob pattern as website scraping so the
-        # frontend's existing polling screen works unmodified.
+        # kick off the initial product sync via Django-Q2 — same EmbeddingJob
+        # pattern as website scraping so the frontend's existing polling
+        # screen works unmodified. Runs in a separate worker process, so
+        # it survives web-process restarts (unlike threading.Thread).
         job = EmbeddingJob.objects.create(website=website, status='running')
 
-        thread = threading.Thread(
-            target=run_product_sync,
-            args=(shopify_store, job)
-        )
-        thread.start()
+        async_task(run_product_sync, shopify_store, job)
 
         # frontend reads job_id from query params to know which job to poll
         frontend_success_url = f'http://localhost:3000/website/new?shopify=connected&job_id={job.id}'
         return redirect(frontend_success_url)
-    
+
 class ShopifySyncView(APIView):
     def post(self, request):
         shopify_store = ShopifyStore.objects.filter(
@@ -117,7 +111,6 @@ class ShopifySyncView(APIView):
         website = shopify_store.website
         job = EmbeddingJob.objects.create(website=website, status='running')
 
-        thread = threading.Thread(target=run_product_sync, args=(shopify_store, job))
-        thread.start()
+        async_task(run_product_sync, shopify_store, job)
 
         return Response({'message': 'Product sync started.', 'job_id': str(job.id)}, status=status.HTTP_202_ACCEPTED)

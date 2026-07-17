@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'django_q',
 
     # our apps
     'accounts',
@@ -56,6 +57,16 @@ INSTALLED_APPS = [
     'suggestions',
     'integrations',
 ]
+
+Q_CLUSTER = {
+    'name': 'wizbot',
+    'workers': 2,
+    'timeout': 300,
+    'retry': 360,
+    'queue_limit': 50,
+    'bulk': 10,
+    'orm': 'default',  # uses your existing Postgres DB as the broker, no Redis needed
+}
 
 AUTH_USER_MODEL = 'accounts.Merchant'
 
