@@ -71,7 +71,7 @@ export default function Dashboard() {
     )
   }
 
-  const firstName = merchant?.first_name || merchant?.username || 'there'
+  const firstName = merchant?.shop_name || 'there'
   const websiteConnected = merchant?.website_status === 'connected'
 
   return (
