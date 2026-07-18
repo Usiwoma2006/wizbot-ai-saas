@@ -3,10 +3,16 @@ import cohere
 
 client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
 
+# Cohere's embed endpoint accepts up to 96 texts per call.
+# Batching drastically cuts down round-trip API calls vs one-at-a-time.
+BATCH_SIZE = 90
+
 
 def embed_text(text):
     """
-    Takes a string of text and returns a vector embedding.
+    Takes a single string of text and returns a vector embedding.
+    Kept for any code that still needs to embed one string at a time
+    (e.g. embedding a customer's live chat query during search).
     """
     response = client.embed(
         texts=[text],
@@ -19,18 +25,42 @@ def embed_text(text):
 def embed_chunks(chunks):
     """
     Takes a list of chunk dicts and adds an embedding to each one.
-    Returns the same list with embeddings added.
+    Sends chunks to Cohere in batches of BATCH_SIZE instead of one
+    request per chunk — same result, far fewer API round-trips.
+    Returns the same list with embeddings added (chunks that fail
+    are skipped, same as before).
     """
     embedded = []
 
-    for chunk in chunks:
+    for i in range(0, len(chunks), BATCH_SIZE):
+        batch = chunks[i:i + BATCH_SIZE]
+        texts = [chunk['content'] for chunk in batch]
+
         try:
-            embedding = embed_text(chunk['content'])
-            chunk['embedding'] = embedding
-            embedded.append(chunk)
-            print(f"Embedded chunk {chunk['chunk_index']} from {chunk['title']}")
+            response = client.embed(
+                texts=texts,
+                model='embed-english-v3.0',
+                input_type='search_document'
+            )
+
+            for chunk, embedding in zip(batch, response.embeddings):
+                chunk['embedding'] = embedding
+                embedded.append(chunk)
+                print(f"Embedded chunk {chunk['chunk_index']} from {chunk['title']}")
+
         except Exception as e:
-            print(f"Failed to embed chunk: {e}")
-            continue
+            # If a whole batch fails, fall back to embedding that batch's
+            # chunks one at a time so a single bad chunk doesn't sink the
+            # other ~90 chunks that were fine.
+            print(f"Batch embedding failed, falling back to individual calls: {e}")
+            for chunk in batch:
+                try:
+                    embedding = embed_text(chunk['content'])
+                    chunk['embedding'] = embedding
+                    embedded.append(chunk)
+                    print(f"Embedded chunk {chunk['chunk_index']} from {chunk['title']}")
+                except Exception as inner_e:
+                    print(f"Failed to embed chunk: {inner_e}")
+                    continue
 
     return embedded

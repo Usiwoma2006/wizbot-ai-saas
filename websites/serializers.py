@@ -1,28 +1,37 @@
 from rest_framework import serializers
-from .models import Website, KnowledgeChunk
+from .models import Website, KnowledgeChunk, CrawledPage
 import requests
+
+
+class CrawledPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CrawledPage
+        fields = ['id', 'url', 'title', 'status', 'http_status']
 
 
 class WebsiteSerializer(serializers.ModelSerializer):
     pages_count = serializers.SerializerMethodField()
     chunks_count = serializers.SerializerMethodField()
+    crawled_pages = CrawledPageSerializer(many=True, read_only=True, source='pages')
 
     class Meta:
         model = Website
         fields = [
             'id', 'url', 'platform', 'access_token', 'status', 'last_scraped', 'created_at',
-            'pages_count', 'chunks_count',
+            'pages_count', 'chunks_count', 'crawled_pages',
         ]
-        read_only_fields = ['id', 'status', 'last_scraped', 'created_at', 'pages_count', 'chunks_count']
+        read_only_fields = ['id', 'status', 'last_scraped', 'created_at', 'pages_count', 'chunks_count', 'crawled_pages']
 
     def get_pages_count(self, obj):
         return obj.pages.count()
 
     def get_chunks_count(self, obj):
         # KnowledgeChunk links to merchant directly, not to Website, so we
-        # go through the page relation instead: sum of chunks across all of
-        # this website's crawled pages.
-        return KnowledgeChunk.objects.filter(page__website=obj).count()
+        # go through both possible source relations: page-sourced chunks
+        # (website scraping) AND product-sourced chunks (Shopify sync).
+        # Using page__website OR product__website covers both source_types.
+        return KnowledgeChunk.objects.filter(page__website=obj).count() + \
+               KnowledgeChunk.objects.filter(product__store__website=obj).count()
 
     def validate_url(self, value):
         try:
