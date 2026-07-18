@@ -2,9 +2,10 @@ from django.shortcuts import redirect
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
+from rest_framework import settings, status
 from django.core import signing
 from django_q.tasks import async_task
+from django.conf import settings
 
 from websites.models import EmbeddingJob, Website
 from .models import ShopifyStore
@@ -96,7 +97,8 @@ class ShopifyCallbackView(APIView):
         async_task(run_product_sync, shopify_store, job)
 
         # frontend reads job_id from query params to know which job to poll
-        frontend_success_url = f'http://localhost:3000/website/new?shopify=connected&job_id={job.id}'
+
+        frontend_success_url = f'{settings.FRONTEND_URL}/website/new?shopify=connected&job_id={job.id}'
         return redirect(frontend_success_url)
 
 class ShopifySyncView(APIView):
