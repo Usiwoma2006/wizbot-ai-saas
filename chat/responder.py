@@ -133,6 +133,7 @@ def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_th
             'answer': "Hi there! 👋 How can I help you today? Feel free to ask me anything about our products, shipping, or store policies.",
             'confidence': 1.0,
             'sources': [],
+            'products': [],
             'needs_human': False
         }
 
@@ -144,6 +145,7 @@ def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_th
                 'answer': "I'm not able to help with that — I can only answer questions about our products and store policies. Is there something about our store I can help with?",
                 'confidence': top_raw_similarity,
                 'sources': [],
+                'products': [],
                 'needs_human': False
             }
 
@@ -152,8 +154,14 @@ def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_th
             'answer': "I'm sorry, I couldn't find that information. Let me connect you with a member of our team who can help further.",
             'confidence': top_raw_similarity,
             'sources': [],
+            'products': [],
             'needs_human': True
         }
+
+    # Compute products up front — needed for both the returned payload and
+    # (below) to make sure the LLM's context stays aligned to the same
+    # product set shown in the widget's cards.
+    structured_products, capped_ids = get_structured_products(relevant_chunks)
 
     context = ""
     sources = []
@@ -198,6 +206,7 @@ CUSTOMER QUESTION:
             'answer': "I'm having trouble finding that information right now. Let me connect you with our team.",
             'confidence': 0,
             'sources': [],
+            'products': [],
             'needs_human': True
         }
 
@@ -207,5 +216,6 @@ CUSTOMER QUESTION:
         'answer': answer,
         'confidence': confidence,
         'sources': sources,
+        'products': structured_products,
         'needs_human': confidence < 0.35
     }
