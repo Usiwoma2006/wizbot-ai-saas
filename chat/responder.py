@@ -1,5 +1,6 @@
 import os
 import cohere
+import re
 from integrations.models import Product
 
 client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
@@ -118,51 +119,52 @@ def get_structured_products(relevant_chunks):
 
 def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_threshold=0.22):
 
+    client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
+
+GREETING_PATTERN = re.compile(
+    r'^\s*(hi|hey|hello|yo|sup|good\s*(morning|afternoon|evening)|howdy)[\s!.,?]*$',
+    re.IGNORECASE
+)
+
+
+def is_greeting(query):
+    return bool(GREETING_PATTERN.match(query.strip()))
+
+
+def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_threshold=0.22):
+
+    if is_greeting(query):
+        return {
+            'answer': "Hi there! 👋 How can I help you today? Feel free to ask me anything about our products, shipping, or store policies.",
+            'confidence': 1.0,
+            'sources': [],
+            'needs_human': False
+        }
+
     if not relevant_chunks:
         if top_raw_similarity < off_topic_threshold:
+            # Genuinely unrelated to this store (weather, poems, etc.)
+            # Decline politely — no human agent, no ticket.
             return {
                 'answer': "I'm not able to help with that — I can only answer questions about our products and store policies. Is there something about our store I can help with?",
                 'confidence': top_raw_similarity,
                 'sources': [],
-                'products': [],
                 'needs_human': False
             }
 
+        # Related to the store, but we don't have the info. Worth a human follow-up.
         return {
             'answer': "I'm sorry, I couldn't find that information. Let me connect you with a member of our team who can help further.",
             'confidence': top_raw_similarity,
             'sources': [],
-            'products': [],
             'needs_human': True
         }
-
-    products, capped_ids = get_structured_products(relevant_chunks)
-
-    # If this is a product-flavored response, restrict the chunks used to
-    # build Cohere's context down to only the chunks belonging to the same
-    # capped_ids product set the cards will show — in that same order.
-    # This is what keeps the generated text and the rendered cards in sync:
-    # previously, context here was built from ALL relevant_chunks (which can
-    # span more distinct products than the 4 that make it into the cards),
-    # so Cohere would sometimes describe a different set of products than
-    # what actually got rendered below the message.
-    if capped_ids:
-        chunks_by_product = {}
-        for chunk in relevant_chunks:
-            if chunk['source_type'] != 'product':
-                continue
-            pid = chunk['product_id']
-            if pid in capped_ids and pid not in chunks_by_product:
-                chunks_by_product[pid] = chunk
-        context_chunks = [chunks_by_product[pid] for pid in capped_ids if pid in chunks_by_product]
-    else:
-        context_chunks = relevant_chunks
 
     context = ""
     sources = []
     seen_pages = set()
 
-    for i, chunk in enumerate(context_chunks):
+    for i, chunk in enumerate(relevant_chunks):
         context += f"\n\nSource {i+1} ({chunk['title']}):\n{chunk['content']}"
 
         page_key = chunk['url']
@@ -176,7 +178,6 @@ def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_th
 
     system_prompt = """You are a helpful customer service assistant for an online store.
 Answer the customer's question using ONLY the information provided in SOURCES.
-If SOURCES describes specific products, mention ONLY the products listed in SOURCES — do not add, omit, or reorder them.
 If you can answer the question, even partially, give a direct, confident answer and do NOT mention a human agent or say you are unsure.
 Only say you'll connect them with a human agent if the SOURCES contain NOTHING relevant to the question at all.
 Keep your answer concise, friendly, and helpful."""
@@ -202,7 +203,6 @@ CUSTOMER QUESTION:
             'answer': "I'm having trouble finding that information right now. Let me connect you with our team.",
             'confidence': 0,
             'sources': [],
-            'products': [],
             'needs_human': True
         }
 
@@ -212,6 +212,5 @@ CUSTOMER QUESTION:
         'answer': answer,
         'confidence': confidence,
         'sources': sources,
-        'products': products,
         'needs_human': confidence < 0.35
     }
