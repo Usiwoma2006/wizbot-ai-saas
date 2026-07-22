@@ -1,11 +1,20 @@
 import os
-import cohere
 import re
+import cohere
 from integrations.models import Product
 
 client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
 
 MAX_PRODUCTS_IN_RESPONSE = 4
+
+GREETING_PATTERN = re.compile(
+    r'^\s*(hi|hey|hello|yo|sup|good\s*(morning|afternoon|evening)|howdy)[\s!.,?]*$',
+    re.IGNORECASE
+)
+
+
+def is_greeting(query):
+    return bool(GREETING_PATTERN.match(query.strip()))
 
 
 def resolve_query(question, history_messages):
@@ -115,20 +124,6 @@ def get_structured_products(relevant_chunks):
         })
 
     return structured, capped_ids
-
-
-def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_threshold=0.22):
-
-    client = cohere.Client(api_key=os.getenv('COHERE_API_KEY'))
-
-GREETING_PATTERN = re.compile(
-    r'^\s*(hi|hey|hello|yo|sup|good\s*(morning|afternoon|evening)|howdy)[\s!.,?]*$',
-    re.IGNORECASE
-)
-
-
-def is_greeting(query):
-    return bool(GREETING_PATTERN.match(query.strip()))
 
 
 def generate_response(query, relevant_chunks, top_raw_similarity=0, off_topic_threshold=0.22):
