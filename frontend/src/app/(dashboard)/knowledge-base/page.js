@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import StatsCard from "@/components/knowledge-base/StatsCard";
-import KnowledgeSourceCard from "@/components/knowledge-base/KnowledgeSourceCard";
-import AIPreviewModal from "@/components/knowledge-base/AIPreviewModal";
-import PreviewDrawer from "@/components/knowledge-base/PreviewDrawer";
-import SearchBar from "@/components/knowledge-base/SearchBar";
-import ArticleCard from "@/components/knowledge-base/ArticleCard";
+import StatsCard from "@/components/Knowledge-base/StatsCard";
+import KnowledgeSourceCard from "@/components/Knowledge-base/KnowledgeSourceCard";
+import AIPreviewModal from "@/components/Knowledge-base/AIPreviewModal";
+import PreviewDrawer from "@/components/Knowledge-base/PreviewDrawer";
+import SearchBar from "@/components/Knowledge-base/SearchBar";
+import ArticleCard from "@/components/Knowledge-base/ArticleCard";
 
 const articles = [
   {
