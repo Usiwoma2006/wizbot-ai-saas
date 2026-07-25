@@ -21,6 +21,40 @@ def embed_text(text):
     )
     return response.embeddings[0]
 
+def embed_and_store_custom_article(article):
+    """
+    Chunks and embeds a CustomArticle's content, saving results as
+    KnowledgeChunk rows. Meant to run via async_task (Django-Q2), not
+    synchronously in the request/response cycle.
+    """
+    from websites.chunker import chunk_text
+    from websites.models import KnowledgeChunk
+
+    article.status = 'embedding'
+    article.save()
+
+    try:
+        chunks = chunk_text(article.content)
+
+        for i, chunk_content in enumerate(chunks):
+            embedding = embed_text(chunk_content)
+            KnowledgeChunk.objects.create(
+                custom_article=article,
+                merchant=article.merchant,
+                content=chunk_content,
+                embedding=embedding,
+                chunk_index=i,
+                source_type='custom'
+            )
+
+        article.status = 'synced'
+        article.save()
+
+    except Exception as e:
+        article.status = 'failed'
+        article.error_message = str(e)
+        article.save()
+
 
 def embed_chunks(chunks):
     """
@@ -64,3 +98,4 @@ def embed_chunks(chunks):
                     continue
 
     return embedded
+

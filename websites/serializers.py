@@ -1,5 +1,5 @@
-from rest_framework import serializers
-from .models import Website, KnowledgeChunk, CrawledPage
+from rest_framework import serializers, status
+from .models import Website, KnowledgeChunk, CrawledPage, CustomArticle
 import requests
 
 
@@ -53,3 +53,18 @@ class WebsiteSerializer(serializers.ModelSerializer):
                 "Something went wrong while checking this URL. Please try again."
             )
         return value
+
+class CustomArticleSerializer(serializers.ModelSerializer):
+    chunks_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomArticle
+        fields = [
+            'id', 'title', 'content', 'status', 'error_message',
+            'chunks_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'status', 'error_message', 'chunks_count', 'created_at', 'updated_at']
+
+    def get_chunks_count(self, obj):
+        # Count KnowledgeChunk instances related to this custom article.
+        return KnowledgeChunk.objects.filter(custom_article=obj).count()

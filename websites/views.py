@@ -2,12 +2,36 @@ from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Website, CrawledPage, EmbeddingJob, KnowledgeChunk
-from .serializers import WebsiteSerializer
+from .models import Website, CrawledPage, EmbeddingJob, KnowledgeChunk, CustomArticle
+from .serializers import WebsiteSerializer, CustomArticleSerializer
 from .scraper import scrape_website
 from .chunker import chunk_pages
 from .embedder import embed_chunks
 from django_q.tasks import async_task
+from .embedder import embed_and_store_custom_article
+
+class CustomArticleListCreateView(generics.ListCreateAPIView):
+    serializer_class = CustomArticleSerializer
+
+    def get_queryset(self):
+        return CustomArticle.objects.filter(merchant=self.request.user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        article = serializer.save(merchant=self.request.user)
+        async_task(embed_and_store_custom_article, article)
+
+
+class CustomArticleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = CustomArticleSerializer
+
+    def get_queryset(self):
+        return CustomArticle.objects.filter(merchant=self.request.user)
+
+    def perform_update(self, serializer):
+        article = serializer.save()
+        # Content changed — old chunks are now stale, wipe and re-embed.
+        article.chunks.all().delete()
+        async_task(embed_and_store_custom_article, article)
 
 
 class WebsiteListCreateView(generics.ListCreateAPIView):

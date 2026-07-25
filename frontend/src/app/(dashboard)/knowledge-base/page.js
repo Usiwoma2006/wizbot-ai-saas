@@ -1,189 +1,157 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { formatDistanceToNow } from 'date-fns'
-import api from '@/lib/api'
+import { useState } from "react";
+import StatsCard from "@/components/knowledge-base/StatsCard";
+import KnowledgeSourceCard from "@/components/knowledge-base/KnowledgeSourceCard";
+import AIPreviewModal from "@/components/knowledge-base/AIPreviewModal";
+import PreviewDrawer from "@/components/knowledge-base/PreviewDrawer";
+import SearchBar from "@/components/knowledge-base/SearchBar";
+import ArticleCard from "@/components/knowledge-base/ArticleCard";
 
-const STATUS_STYLES = {
-  success: 'bg-green-50 text-green-700',
-  pending: 'bg-amber-50 text-amber-600',
-  failed: 'bg-red-50 text-red-600',
-}
+const articles = [
+  {
+    id: 1,
+    title: "Shipping Policy",
+    source: "Website",
+    status: "Synced",
+    url: "wizbot-demo.com/shipping",
+    lastUpdated: "2 hours ago",
+    note: "Customers receive orders in 3–5 business days...",
+    content:
+      "We ship to over 40 countries worldwide. Standard delivery takes 5–10 business days depending on destination.",
+    chunks: "4",
+    similarity: "0.86",
+  },
+  {
+    id: 2,
+    title: "Returns",
+    source: "Custom Article",
+    status: "Synced",
+    url: "custom/returns",
+    lastUpdated: "Today",
+    note: "Refunds take 5–7 business days.",
+    content:
+      "Free returns within 30 days of delivery. Items must be unworn, unwashed, and in original packaging with tags attached.",
+    chunks: "2",
+    similarity: "0.79",
+  },
+  {
+    id: 3,
+    title: "Payment Methods",
+    source: "Website",
+    status: "Synced",
+    url: "wizbot-demo.com/payments",
+    lastUpdated: "Yesterday",
+    note: "We accept credit cards, PayPal, and Bitcoin.",
+    content:
+      "We accept Visa, Mastercard, American Express, Apple Pay, Google Pay, and Klarna for installment plans.",
+    chunks: "3",
+    similarity: "0.79",
+  },
+  {
+    id: 4,
+    title: "Tracking Orders",
+    source: "Custom Article",
+    status: "Synced",
+    url: "custom/tracking",
+    lastUpdated: "3 days ago",
+    note: "Track your order with the provided tracking number.",
+    content:
+      "Once your order ships, you'll receive a tracking number by email. Track it directly on the carrier's website.",
+    chunks: "2",
+    similarity: "0.81",
+  },
+];
 
-const STATUS_LABEL = {
-  success: 'Crawled',
-  pending: 'Pending',
-  failed: 'Failed',
-}
+const suggestedQuestions = [
+  "Do you ship internationally?",
+  "Can I pay with Bitcoin?",
+  "What is your return policy?",
+];
 
-export default function KnowledgeBase() {
-  const [website, setWebsite] = useState(null)
-  const [pages, setPages] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
-  const [error, setError] = useState(null)
+export default function KnowledgeBasePage() {
+  const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
+  const [previewArticle, setPreviewArticle] = useState(null);
 
-  async function loadWebsite() {
-    setLoading(true)
-    setError(null)
-    try {
-      const { data } = await api.get('/websites/')
-      const primary = Array.isArray(data) ? data[0] : data.results?.[0]
-      setWebsite(primary ?? null)
-      setPages(primary?.crawled_pages ?? [])
-    } catch (err) {
-      setError(err)
-    } finally {
-      setLoading(false)
-    }
+  function handlePreview(article) {
+    setPreviewArticle(article);
   }
 
-  useEffect(() => {
-    loadWebsite()
-  }, [])
-
-  async function handleResync() {
-    if (!website) return
-    setSyncing(true)
-    try {
-      await api.post(`/websites/${website.id}/sync/`)
-      await loadWebsite()
-    } catch (err) {
-      setError(err)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="p-8 animate-pulse space-y-6">
-        <div className="h-8 w-56 bg-gray-200 rounded" />
-        <div className="h-40 bg-gray-100 rounded-xl" />
-        <div className="h-64 bg-gray-100 rounded-xl" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="p-8">
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-6 text-sm">
-          Couldn&apos;t load your knowledge base. Please try again.
-        </div>
-      </div>
-    )
-  }
-
-  if (!website) {
-    return (
-      <div className="p-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900">Knowledge Base</h1>
-          <p className="text-sm text-gray-500 mt-1">What Wiz knows about your store.</p>
-        </div>
-        <div className="bg-white rounded-xl border border-dashed border-gray-200 p-10 text-center">
-          <p className="text-sm text-gray-500 mb-4">You haven&apos;t connected a website yet.</p>
-          <a href="/websites/new" className="inline-block text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            Connect a store
-          </a>
-        </div>
-      </div>
-    )
+  function handleClosePreview() {
+    setPreviewArticle(null);
   }
 
   return (
-    <div className="p-8">
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-2xl font-bold text-slate-900 mb-6">Knowledge Base</h1>
 
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900">Knowledge Base</h1>
-        <p className="text-sm text-gray-500 mt-1">What Wiz knows about your store.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatsCard title="Articles" value="128" subtitle="+12 this week" />
+        <StatsCard title="Website Pages" value="64" subtitle="Auto Synced" />
+        <StatsCard title="Custom Articles" value="18" subtitle="Manually created" />
+        <StatsCard title="Last Sync" value="2h ago" subtitle="Website • Complete" />
       </div>
 
-      {/* Connected Store Card */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="text-sm font-medium text-gray-900">{website.url}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full border ${
-                website.status === 'connected'
-                  ? 'bg-green-50 text-green-700 border-green-200'
-                  : 'bg-gray-50 text-gray-500 border-gray-200'
-              }`}>
-                {website.status === 'connected' ? 'Ready' : website.status}
-              </span>
-            </div>
-            <p className="text-xs text-gray-400">
-              {website.platform}
-              {website.last_scraped && ` · last synced ${formatDistanceToNow(new Date(website.last_scraped), { addSuffix: true })}`}
-            </p>
-          </div>
-          <button
-            onClick={handleResync}
-            disabled={syncing}
-            className="flex items-center justify-center gap-2 text-sm px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed w-fit"
-          >
-            {syncing ? 'Syncing…' : 'Resync'}
-          </button>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <KnowledgeSourceCard
+            title="Shopify"
+            badge="Connected"
+            badgeColor="green"
+            number="64"
+            label="Products Indexed"
+            time="2 hours ago"
+            button="Sync Website"
+          />
+          <KnowledgeSourceCard
+            title="Custom Articles"
+            badge="Editable"
+            badgeColor="blue"
+            number="18"
+            label="Articles"
+            time="Today"
+            button="New Article"
+          />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-6 pt-6 border-t border-gray-100">
-          <div>
-            <p className="text-xs text-gray-400">Pages crawled</p>
-            <p className="text-2xl font-semibold text-gray-900 mt-1">{website.pages_count ?? pages.length}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Chunks indexed</p>
-            <p className="text-2xl font-semibold text-gray-900 mt-1">{website.chunks_count ?? '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-400">Platform</p>
-            <p className="text-2xl font-semibold text-gray-900 mt-1">{website.platform}</p>
+        <div className="lg:col-span-3 space-y-4">
+          <SearchBar />
+          <div className="space-y-4">
+            {articles.map((article) => (
+              <ArticleCard
+                key={article.id}
+                title={article.title}
+                source={article.source}
+                note={article.note}
+                chunks={article.chunks}
+                onPreview={() => handlePreview(article)}
+                onEdit={() => console.log("edit", article.id)}
+                onDelete={() => console.log("delete", article.id)}
+              />
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Crawled Pages Table */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6">
-        <div className="mb-4">
-          <h2 className="text-base font-semibold text-gray-900">Crawled Pages</h2>
-          <p className="text-sm text-gray-400">All pages Wiz has indexed.</p>
-        </div>
+      {/* Floating AI Preview trigger */}
+      <button
+        onClick={() => setAiPreviewOpen(true)}
+        className="fixed bottom-8 right-8 rounded-full bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700 transition z-40"
+      >
+        Preview AI
+      </button>
 
-        {pages.length === 0 ? (
-          <div className="py-12 text-center text-sm text-gray-400">
-            No pages crawled yet. Run a sync to get started.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px]">
-              <thead>
-                <tr className="text-xs text-gray-400 uppercase border-b border-gray-100">
-                  <th className="text-left pb-3">Page Title</th>
-                  <th className="text-left pb-3">URL</th>
-                  <th className="text-right pb-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pages.map((page) => (
-                  <tr key={page.id} className="border-b border-gray-50 last:border-0">
-                    <td className="py-3 text-sm text-gray-700">{page.title || 'Untitled'}</td>
-                    <td className="py-3 text-sm text-gray-400 font-mono truncate max-w-[240px]">{page.url}</td>
-                    <td className="py-3 text-right">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${STATUS_STYLES[page.status] ?? 'bg-gray-50 text-gray-600'}`}>
-                        {STATUS_LABEL[page.status] ?? page.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <AIPreviewModal
+        isOpen={aiPreviewOpen}
+        onClose={() => setAiPreviewOpen(false)}
+        suggestedQuestions={suggestedQuestions}
+      />
 
+      <PreviewDrawer
+        isOpen={!!previewArticle}
+        onClose={handleClosePreview}
+        article={previewArticle}
+      />
     </div>
-  )
+  );
 }

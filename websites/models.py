@@ -130,6 +130,35 @@ class EmbeddingJob(TimeStampedModel):
 
     def __str__(self):
         return f"{self.website} - {self.status}"
+
+class CustomArticle(TimeStampedModel):
+
+    class ArticleStatus(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        EMBEDDING = 'embedding', 'Embedding'
+        SYNCED = 'synced', 'Synced'
+        FAILED = 'failed', 'Failed'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    merchant = models.ForeignKey(
+        'accounts.Merchant',
+        on_delete=models.CASCADE,
+        related_name='custom_articles'
+    )
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=ArticleStatus.choices,
+        default=ArticleStatus.DRAFT
+    )
+    error_message = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return self.title
+    
+
+
     
 class KnowledgeChunk(TimeStampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -138,6 +167,13 @@ class KnowledgeChunk(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name='chunks',
         null=True, blank=True          # CHANGED
+    )
+    custom_article = models.ForeignKey(
+        'websites.CustomArticle',
+        on_delete=models.CASCADE,
+        related_name='chunks',
+        null=True,
+        blank=True
     )
     product = models.ForeignKey(       # NEW
         'integrations.Product',
@@ -156,7 +192,12 @@ class KnowledgeChunk(TimeStampedModel):
     chunk_index = models.IntegerField(default=0)
 
     def __str__(self):
-        label = self.page.title if self.page_id else (self.product.title if self.product_id else 'unknown')
+        label = (
+            self.page.title if self.page_id
+            else self.product.title if self.product_id
+            else self.custom_article.title if self.custom_article_id
+            else 'unknown'
+        )
         return f"Chunk {self.chunk_index} - {label}"
 
     def get_source(self):
@@ -164,4 +205,6 @@ class KnowledgeChunk(TimeStampedModel):
             return {'title': self.product.title, 'url': self.product.product_url, 'type': 'product'}
         if self.page_id:
             return {'title': self.page.title, 'url': self.page.url, 'type': 'page'}
+        if self.source_type == 'custom' and self.custom_article_id:
+            return {'title': self.custom_article.title, 'url': None, 'type': 'custom'}
         return {'title': None, 'url': None, 'type': self.source_type or 'unknown'}
