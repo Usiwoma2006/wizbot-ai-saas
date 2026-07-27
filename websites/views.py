@@ -3,12 +3,35 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Website, CrawledPage, EmbeddingJob, KnowledgeChunk, CustomArticle
-from .serializers import WebsiteSerializer, CustomArticleSerializer
+from .serializers import CrawledPageSerializer, WebsiteSerializer, CustomArticleSerializer
 from .scraper import scrape_website
 from .chunker import chunk_pages
 from .embedder import embed_chunks
 from django_q.tasks import async_task
 from .embedder import embed_and_store_custom_article
+from rest_framework.permissions import IsAuthenticated
+from django.shortcuts import get_object_or_404
+
+class WebsitePagesAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        print("===== DEBUG =====")
+        print("request.user:", request.user)
+        print("request.user.id:", request.user.id)
+        print("pk:", pk)
+        print("=================")
+        website = get_object_or_404(
+            Website,
+            pk=pk,
+            merchant=request.user
+        )
+
+        pages = website.pages.all().order_by("title")
+
+        serializer = CrawledPageSerializer(pages, many=True)
+
+        return Response(serializer.data)
 
 class CustomArticleListCreateView(generics.ListCreateAPIView):
     serializer_class = CustomArticleSerializer

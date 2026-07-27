@@ -1,13 +1,19 @@
-from rest_framework import serializers, status
+from rest_framework import serializers
 from .models import Website, KnowledgeChunk, CrawledPage, CustomArticle
 import requests
 
 
 class CrawledPageSerializer(serializers.ModelSerializer):
+    chunks_count = serializers.SerializerMethodField()
+
     class Meta:
         model = CrawledPage
-        fields = ['id', 'url', 'title', 'status', 'http_status']
+        fields = ['id', 'url', 'title', 'status', 'http_status', 'clean_text', 'chunks_count']
 
+    def get_chunks_count(self, obj):
+        # Same pattern as CustomArticleSerializer.get_chunks_count(),
+        # but scoped to this page instead of a custom_article.
+        return KnowledgeChunk.objects.filter(page=obj).count()
 
 class WebsiteSerializer(serializers.ModelSerializer):
     pages_count = serializers.SerializerMethodField()

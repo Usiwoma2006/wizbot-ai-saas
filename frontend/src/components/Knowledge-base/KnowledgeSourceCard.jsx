@@ -6,10 +6,13 @@ const KnowledgeSourceCard = ({
   label,
   time,
   button,
+  onButtonClick,
+  buttonDisabled = false,
 }) => {
   const badgeStyles = {
     green: "bg-green-100 text-green-700",
     blue: "bg-blue-100 text-blue-700",
+    gray: "bg-gray-100 text-gray-600",
   };
 
   return (
@@ -23,7 +26,7 @@ const KnowledgeSourceCard = ({
       {/* Badge */}
       <span
         className={`inline-block mt-2 rounded-full px-3 py-1 text-xs font-medium ${
-          badgeStyles[badgeColor]
+          badgeStyles[badgeColor] ?? badgeStyles.gray
         }`}
       >
         {badge}
@@ -52,7 +55,11 @@ const KnowledgeSourceCard = ({
       </div>
 
       {/* Action Button */}
-      <button className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-sm font-medium text-white hover:bg-blue-700 transition">
+      <button
+        onClick={onButtonClick}
+        disabled={buttonDisabled}
+        className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+      >
         {button}
       </button>
 
