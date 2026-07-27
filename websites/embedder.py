@@ -27,6 +27,7 @@ def embed_and_store_custom_article(article):
     KnowledgeChunk rows. Meant to run via async_task (Django-Q2), not
     synchronously in the request/response cycle.
     """
+    from django.db import transaction
     from websites.chunker import chunk_text
     from websites.models import KnowledgeChunk
 
@@ -34,18 +35,23 @@ def embed_and_store_custom_article(article):
     article.save()
 
     try:
-        chunks = chunk_text(article.content)
+        with transaction.atomic():
+            # Idempotency: re-embedding (edit -> re-publish) must not
+            # leave stale chunks from the previous version behind.
+            KnowledgeChunk.objects.filter(custom_article=article).delete()
 
-        for i, chunk_content in enumerate(chunks):
-            embedding = embed_text(chunk_content)
-            KnowledgeChunk.objects.create(
-                custom_article=article,
-                merchant=article.merchant,
-                content=chunk_content,
-                embedding=embedding,
-                chunk_index=i,
-                source_type='custom'
-            )
+            chunks = chunk_text(article.content)
+
+            for i, chunk_content in enumerate(chunks):
+                embedding = embed_text(chunk_content)
+                KnowledgeChunk.objects.create(
+                    custom_article=article,
+                    merchant=article.merchant,
+                    content=chunk_content,
+                    embedding=embedding,
+                    chunk_index=i,
+                    source_type='custom'
+                )
 
         article.status = 'synced'
         article.save()

@@ -2,41 +2,35 @@
 
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
-
-// Temporary mock data, keyed by question text — swap for a real API call
-// (POST question → sandbox endpoint) once the backend phase starts. Shape
-// mirrors what search_knowledge_base + generate_response already return,
-// so the swap later should just be a fetch + setState, not a UI change.
-const MOCK_RESPONSES = {
-  "Do you ship internationally?": {
-    answer:
-      "Yes. We currently ship to over 40 countries worldwide. Standard delivery takes 5–10 business days, and express options are available at checkout.",
-    confidence: "96%",
-    sources: "Shipping Policy",
-    chunks: "4",
-  },
-  "What is your return policy?": {
-    answer:
-      "We offer free returns within 30 days of delivery. Items must be unworn, unwashed, and in original packaging with tags attached.",
-    confidence: "91%",
-    sources: "Return & Refund Policy",
-    chunks: "3",
-  },
-};
+import api from "@/lib/api";
 
 const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
   const [inputValue, setInputValue] = useState("");
   const [selectedQuestion, setSelectedQuestion] = useState(null);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   if (!isOpen) return null;
 
-  const result = selectedQuestion ? MOCK_RESPONSES[selectedQuestion] : null;
-  const canAnswer = !!result;
+  const canAnswer = result ? result.can_answer : false;
 
-  function askQuestion(question) {
+  async function askQuestion(question) {
     if (!question.trim()) return;
     setInputValue(question);
     setSelectedQuestion(question);
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const { data } = await api.post('/dashboard/preview/', { question });
+      setResult(data);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleAsk() {
@@ -50,6 +44,8 @@ const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
   function handleClose() {
     setInputValue("");
     setSelectedQuestion(null);
+    setResult(null);
+    setError(null);
     onClose();
   }
 
@@ -99,7 +95,7 @@ const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
               />
               <button
                 onClick={handleAsk}
-                disabled={!inputValue.trim()}
+                disabled={!inputValue.trim() || loading}
                 className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Ask
@@ -114,7 +110,8 @@ const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
                 <button
                   key={q}
                   onClick={() => handleSuggestedClick(q)}
-                  className={`rounded-full border px-4 py-2 text-sm transition ${
+                  disabled={loading}
+                  className={`rounded-full border px-4 py-2 text-sm transition disabled:opacity-50 ${
                     selectedQuestion === q
                       ? "border-blue-600 bg-blue-50 text-blue-700"
                       : "border-gray-200 hover:bg-gray-50"
@@ -128,7 +125,13 @@ const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
 
           {/* Nothing renders below this line until a question has been asked */}
           {selectedQuestion && (
-            canAnswer ? (
+            loading ? (
+              <p className="text-sm text-gray-500">Thinking...</p>
+            ) : error ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+                Something went wrong. Please try again.
+              </div>
+            ) : canAnswer ? (
               <div className="space-y-4">
                 <div>
                   <h3 className="mb-2 text-sm font-medium text-gray-700">AI Answer</h3>
@@ -140,15 +143,23 @@ const AIPreviewModal = ({ isOpen, onClose, suggestedQuestions }) => {
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-xl border border-gray-100 p-4">
                     <p className="text-xs text-gray-500">Confidence</p>
-                    <p className="mt-1 text-lg font-semibold text-gray-900">{result.confidence}</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {Math.round(result.confidence * 100)}%
+                    </p>
                   </div>
                   <div className="rounded-xl border border-gray-100 p-4">
                     <p className="text-xs text-gray-500">Sources Used</p>
-                    <p className="mt-1 text-lg font-semibold text-gray-900">{result.sources}</p>
+                    <ul className="mt-1 text-sm text-gray-900">
+                      {result.sources.map((s, i) => (
+                        <li key={i}>{s.title}</li>
+                      ))}
+                    </ul>
                   </div>
                   <div className="rounded-xl border border-gray-100 p-4">
                     <p className="text-xs text-gray-500">Chunks Used</p>
-                    <p className="mt-1 text-lg font-semibold text-gray-900">{result.chunks}</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {result.chunks.length}
+                    </p>
                   </div>
                 </div>
               </div>

@@ -35,13 +35,22 @@ def cosine_similarity(vec1, vec2):
 
 
 def search_knowledge_base(query, merchant, top_k=5, min_similarity=0.3):
+    """
+    Searches the merchant's knowledge base for the most relevant chunks.
+
+    Returns a tuple: (filtered_results, top_raw_similarity)
+    - filtered_results: up to top_k chunks that meet min_similarity, used
+      to build the Cohere prompt context.
+    - top_raw_similarity: the single best similarity score found BEFORE
+      filtering, even if nothing met the bar.
+    """
     from websites.models import KnowledgeChunk
 
     query_embedding = embed_query(query)
 
     chunks = KnowledgeChunk.objects.filter(
         merchant=merchant
-    ).select_related('page', 'product')  # avoid N+1 when get_source() runs per chunk
+    ).select_related('page', 'product', 'custom_article')
 
     results = []
 
@@ -50,15 +59,16 @@ def search_knowledge_base(query, merchant, top_k=5, min_similarity=0.3):
             continue
 
         similarity = cosine_similarity(query_embedding, chunk.embedding)
-        source = chunk.get_source()  # {title, url, type}
+
+        source = chunk.get_source()
 
         results.append({
             'content': chunk.content,
             'url': source['url'],
             'title': source['title'],
-            'similarity': similarity,
-            'source_type': chunk.source_type,
-            'product_id': chunk.product_id,
+            'source_type': source['type'],
+            'product_id' : chunk.product_id,
+            'similarity': similarity
         })
 
     results.sort(key=lambda x: x['similarity'], reverse=True)

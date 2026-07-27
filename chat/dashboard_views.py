@@ -2,9 +2,12 @@ from datetime import timedelta
 from django.utils import timezone
 from django.db.models import Count, Avg, Q
 from django.db.models.functions import TruncDate
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import ChatMessage
+from websites.searcher import search_knowledge_base
+from chat.responder import generate_response
 
 
 def _range_bounds(range_param):
@@ -116,3 +119,32 @@ class DashboardSummaryView(APIView):
         ]
 
         return Response({'stats': stats, 'chart': chart, 'top_questions': top_questions})
+
+class AIPreviewView(APIView):
+
+    def post(self, request):
+        question = request.data.get('question')
+
+        if not question:
+            return Response(
+                {"error": "question is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        relevant_chunks, top_raw_similarity = search_knowledge_base(question, request.user)
+        ai_response = generate_response(question, relevant_chunks, top_raw_similarity)
+
+        return Response({
+            'answer': ai_response['answer'],
+            'confidence': round(ai_response['confidence'], 3),
+            'sources': ai_response['sources'],
+            'can_answer': bool(relevant_chunks),
+            'chunks': [
+                {
+                    'content': chunk['content'],
+                    'similarity': round(chunk['similarity'], 3),
+                    'source_type': chunk['source_type'],
+                }
+                for chunk in relevant_chunks
+            ],
+        })
